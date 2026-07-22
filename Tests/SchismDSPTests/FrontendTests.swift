@@ -18,14 +18,17 @@ final class KaldiFbankTests: XCTestCase {
         let norm = got.map { ($0 + 4.2677393) / (2 * 4.5689974) }
         assertClose(norm, wantNorm.data, atol: 2e-4, rtol: 1e-4, "ast normalization")
 
-        // astFeatures pads to the model's fixed 1024 frames
+        // astFeatures pads to the model's fixed 1024 frames — in the RAW
+        // domain, so padding rows normalize to ~0.467 (see the pipeline
+        // vectors' short_windows for the reference-pinned value)
         let features = KaldiFbank.astFeatures(wav.data)
         XCTAssertEqual(features.count, 1024 * 128)
         assertClose(
             Array(features[0..<(frames * 128)]), wantNorm.data,
             atol: 2e-4, rtol: 1e-4, "astFeatures body"
         )
-        XCTAssertTrue(features[(frames * 128)...].allSatisfy { $0 == 0 })
+        let pad: Float = (0 + 4.2677393) / (2 * 4.5689974)
+        XCTAssertTrue(features[(frames * 128)...].allSatisfy { $0 == pad })
     }
 
     func testShortInputIsEmpty() {

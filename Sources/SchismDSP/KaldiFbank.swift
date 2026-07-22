@@ -108,15 +108,19 @@ public enum KaldiFbank {
         return (numFrames, out)
     }
 
-    /// The full AST model input: fbank, normalized
-    /// `(x + 4.2677393) / (2 * 4.5689974)`, zero-padded or truncated to
-    /// `maxFrames` rows. Returns `(maxFrames, 128)` row-major.
+    /// The full AST model input: fbank, zero-padded or truncated to
+    /// `maxFrames` rows, then normalized `(x + 4.2677393) / (2 * 4.5689974)`.
+    /// Padding happens in the raw fbank domain, exactly like the reference
+    /// feature extractor — padding rows normalize to
+    /// `4.2677393 / (2 * 4.5689974)` ≈ 0.467, not 0.
+    /// Returns `(maxFrames, 128)` row-major.
     public static func astFeatures(
         _ waveform: [Float], maxFrames: Int = 1024
     ) -> [Float] {
         let (frames, fb) = fbank(waveform)
         let bins = 128
-        var out = [Float](repeating: 0, count: maxFrames * bins)
+        let paddingValue: Float = (0 + 4.2677393) / (2 * 4.5689974)
+        var out = [Float](repeating: paddingValue, count: maxFrames * bins)
         for t in 0..<min(frames, maxFrames) {
             for m in 0..<bins {
                 out[t * bins + m] = (fb[t * bins + m] + 4.2677393) / (2 * 4.5689974)
