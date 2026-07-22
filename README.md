@@ -100,7 +100,17 @@ let perClass = Classification.aggregateMax(scores)  // "did it occur anywhere?"
 ```sh
 swift test                       # downloads vectors from Hugging Face (cached)
 SCHISM_DSP_VECTORS_DIR=path/to/build swift test   # offline, local vectors
+
+# end-to-end: real fp32 Core ML cores + DSP + pipeline on a whole track,
+# vs the verified MLX references (~600 MB of model downloads, cached)
+SCHISM_DSP_INTEGRATION=1 swift test --filter IntegrationTests
 ```
+
+The integration tests cover one representative per family (RoFormer 18M,
+HTDemucs, AST — the sibling models share every host code path) against
+`test_vectors_integration.npz`, running fp32 on CPU. Their per-chunk
+closures double as the reference host glue for each model card's I/O
+contract.
 
 Comparisons are `numpy.allclose`-style (`|a−b| ≤ atol + rtol·|b|`) with
 per-frontend tolerances around 1e-4 relative — the float32-vs-float64-FFT

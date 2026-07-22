@@ -12,7 +12,35 @@ jobs:
       - name: Cache test vectors
         uses: actions/cache@v4
         with:
-          path: ~/Library/Caches/schism-dsp
+          path: |
+            ~/Library/Caches/schism-dsp
+            !~/Library/Caches/schism-dsp/models
           key: vectors-${{ hashFiles('Tests/**') }}
           restore-keys: vectors-
       - run: swift test
+
+  # end-to-end: real fp32 Core ML cores + SchismDSP + SchismPipeline on a
+  # whole track vs the MLX references. ~600 MB of models on a cold cache, so
+  # main-only (the unit job stays the fast PR signal).
+  integration:
+    runs-on: macos-15
+    if: github.ref == 'refs/heads/main'
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache test vectors
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/schism-dsp
+            !~/Library/Caches/schism-dsp/models
+          key: vectors-${{ hashFiles('Tests/**') }}
+          restore-keys: vectors-
+      - name: Cache Core ML models
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/schism-dsp/models
+          # stable key: model files on HF are immutable in practice; bump
+          # the suffix when a model repo is republished
+          key: coreml-models-v1
+      - run: SCHISM_DSP_INTEGRATION=1 swift test --filter IntegrationTests
