@@ -1,0 +1,18 @@
+name: test
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache test vectors
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/schism-dsp
+          key: vectors-${{ hashFiles('Tests/**') }}
+          restore-keys: vectors-
+      - run: swift test
