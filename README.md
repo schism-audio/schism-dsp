@@ -80,8 +80,10 @@ let stems = try Separation.roformer(
 
 `Separation.demucs` is the HTDemucs equivalent (`apply_model(shifts=0,
 split=True)` semantics: centered padding pulled from the surrounding track,
-triangular blending); `Separation.bagCombine` merges htdemucs_ft's four
-one-hot cores.
+triangular blending). For htdemucs_ft, run `Separation.demucs` once per
+core over the full track and merge the four estimates with
+`Separation.bagCombine(estimates, weights:)` (one-hot weights — stem *k*
+from core *k*).
 
 ## Example: AST on long audio
 
