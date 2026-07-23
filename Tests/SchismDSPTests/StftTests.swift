@@ -15,6 +15,45 @@ final class RealFFTTests: XCTestCase {
     }
 }
 
+final class RectWindowStftTests: XCTestCase {
+    // torch.stft called WITHOUT a window (SCNet) is rectangular. No public
+    // vectors exist for SCNet, so this is a pure-Swift consistency check:
+    // rect-window forward/inverse must round-trip (overlap-add with a
+    // constant window is exact wherever the window sum is nonzero), and the
+    // rect path must actually differ from the default Hann path.
+    func testRectangularRoundtrip() {
+        let length = 5000
+        var rng = SystemRandomNumberGenerator()
+        let x = (0..<length).map { _ in Float.random(in: -1...1, using: &rng) }
+        for (nFFT, hop) in [(1024, 256), (512, 160)] {
+            let rect = [Float](repeating: 1, count: nFFT)
+            for normalized in [false, true] {
+                let z = STFT.forward(
+                    x, nFFT: nFFT, hopLength: hop, normalized: normalized,
+                    window: rect
+                )
+                let back = STFT.inverse(
+                    z, hopLength: hop, length: length, normalized: normalized,
+                    window: rect
+                )
+                assertClose(
+                    back, x, atol: 1e-5, rtol: 1e-5,
+                    "rect roundtrip n=\(nFFT) hop=\(hop) norm=\(normalized)"
+                )
+            }
+            let hann = STFT.forward(x, nFFT: nFFT, hopLength: hop, normalized: false)
+            let rectZ = STFT.forward(
+                x, nFFT: nFFT, hopLength: hop, normalized: false, window: rect
+            )
+            var maxDiff: Float = 0
+            for i in 0..<hann.real.count {
+                maxDiff = max(maxDiff, abs(hann.real[i] - rectZ.real[i]))
+            }
+            XCTAssertGreaterThan(maxDiff, 1, "rect window must differ from Hann")
+        }
+    }
+}
+
 final class RoformerStftTests: XCTestCase {
     // unnormalized STFT (hop 512) at both resolutions + the merged layout,
     // vs schism-audio/mini-bs-roformer-v2-coreml test vectors

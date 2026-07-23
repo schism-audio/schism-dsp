@@ -4,17 +4,21 @@ import Foundation
 /// `schism_mlx.audio.stft_torchlike` / `istft_torchlike` (the verified numpy
 /// references the Core ML models ship with).
 ///
-/// Conventions: periodic Hann window (`win_length == n_fft`), `center=True`
-/// reflect padding, `normalized` multiplies the analysis by `1/sqrt(n_fft)`
-/// (HTDemucs: `true`; Mini-BS-RoFormer: `false`).
+/// Conventions: periodic Hann window (`win_length == n_fft`) unless an
+/// explicit `window` is passed, `center=True` reflect padding, `normalized`
+/// multiplies the analysis by `1/sqrt(n_fft)` (HTDemucs: `true`;
+/// Mini-BS-RoFormer: `false`). Pass `window: [Float](repeating: 1, ...)`
+/// to match `torch.stft` called *without* a window (rectangular — SCNet).
 public enum STFT {
     /// One channel of audio -> `(n_fft/2 + 1, num_frames)` complex.
     public static func forward(
-        _ x: [Float], nFFT: Int, hopLength: Int, normalized: Bool
+        _ x: [Float], nFFT: Int, hopLength: Int, normalized: Bool,
+        window: [Float]? = nil
     ) -> ComplexMatrix {
         let padded = DSP.reflectPad(x, left: nFFT / 2, right: nFFT / 2)
         let numFrames = 1 + (padded.count - nFFT) / hopLength
-        let window = DSP.hannPeriodic(nFFT)
+        let window = window ?? DSP.hannPeriodic(nFFT)
+        precondition(window.count == nFFT, "window length must equal nFFT")
         let fft = RealFFT(length: nFFT)
         let bins = nFFT / 2 + 1
         var out = ComplexMatrix(freqs: bins, frames: numFrames)
@@ -38,10 +42,12 @@ public enum STFT {
     /// squared window (accumulated in Double, as the numpy reference does),
     /// then trimmed by `n_fft/2` on the left.
     public static func inverse(
-        _ z: ComplexMatrix, hopLength: Int, length: Int, normalized: Bool
+        _ z: ComplexMatrix, hopLength: Int, length: Int, normalized: Bool,
+        window: [Float]? = nil
     ) -> [Float] {
         let nFFT = 2 * (z.freqs - 1)
-        let window = DSP.hannPeriodic(nFFT)
+        let window = window ?? DSP.hannPeriodic(nFFT)
+        precondition(window.count == nFFT, "window length must equal nFFT")
         let fft = RealFFT(length: nFFT)
         let total = nFFT + hopLength * (z.frames - 1)
         var acc = [Double](repeating: 0, count: total)
