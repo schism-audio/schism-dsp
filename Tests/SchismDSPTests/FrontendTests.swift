@@ -78,6 +78,32 @@ final class LogMelTests: XCTestCase {
     }
 }
 
+final class BeatThisMelTests: XCTestCase {
+    func testMelFilterbankMatchesShipped() throws {
+        let npz = try Vectors.load(
+            repo: "beat-this-coreml", file: "test_vectors_beatmel.npz"
+        )
+        let want = try XCTUnwrap(npz["mel_filterbank"]) // (128, 513)
+        let got = BeatThisMel.melBanks()
+        // float32 arithmetic transliterated op-for-op — observed bit-exact
+        // on arm64; the tolerance only allows for 1-ulp libm exp differences
+        assertClose(got, want.data, atol: 1e-7, rtol: 1e-6, "beat-this filterbank")
+    }
+
+    func testLogMel() throws {
+        let npz = try Vectors.load(
+            repo: "beat-this-coreml", file: "test_vectors_beatmel.npz"
+        )
+        let wav = try XCTUnwrap(npz["waveform"]) // (44100,)
+        let want = try XCTUnwrap(npz["logmel"]) // (101, 128)
+        let (frames, got) = BeatThisMel.compute(wav.data)
+        XCTAssertEqual(frames, want.shape[0])
+        // log1p compresses the float32-vs-float64-FFT noise: observed worst
+        // |diff| 1.7e-6, so the house 1e-4 relative floor has a wide margin
+        assertClose(got, want.data, atol: 1e-5, rtol: 1e-4, "beat-this logmel")
+    }
+}
+
 final class DemucsTests: XCTestCase {
     func testNormalizedStftIstft() throws {
         let npz = try Vectors.load(repo: "htdemucs-coreml", file: "test_vectors_stft.npz")
