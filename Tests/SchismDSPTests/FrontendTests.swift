@@ -38,6 +38,33 @@ final class KaldiFbankTests: XCTestCase {
     }
 }
 
+final class EfficientATMelTests: XCTestCase {
+    func testEfficientATMel() throws {
+        let npz = try Vectors.load(
+            repo: "efficient-at-mn10-coreml", file: "test_vectors_logmel.npz"
+        )
+        let wav = try XCTUnwrap(npz["waveform"]) // (64000,)
+        let want = try XCTUnwrap(npz["logmel"]) // (200, 128)
+        let (frames, got) = EfficientATMel.compute(wav.data)
+        XCTAssertEqual(frames, want.shape[0])
+        // log-domain but divided by 5, and the values cross zero after the
+        // (x + 4.5) / 5 shift, so atol dominates; vector computed with a
+        // float64 FFT — observed worst |diff| 5.8e-5
+        assertClose(got, want.data, atol: 2e-4, rtol: 1e-4, "efficient-at logmel")
+    }
+
+    func testTenSecondsIsExactly1000Frames() {
+        let (frames, data) = EfficientATMel.compute(
+            [Float](repeating: 0, count: 320000)
+        )
+        XCTAssertEqual(frames, 1000)
+        XCTAssertEqual(data.count, 1000 * 128)
+        // silence: mel = 0 -> (ln(1e-5) + 4.5) / 5 everywhere
+        let silent = (log(Float(1e-5)) + 4.5) / 5
+        XCTAssertTrue(data.allSatisfy { abs($0 - silent) < 1e-6 })
+    }
+}
+
 final class LogMelTests: XCTestCase {
     func testLogMel() throws {
         let npz = try Vectors.load(
