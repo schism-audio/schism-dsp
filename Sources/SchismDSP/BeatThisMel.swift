@@ -11,12 +11,19 @@ public enum BeatThisMel {
     /// rounding per element), lower half from the start, upper half from
     /// the end.
     static func linspaceTorchlike(_ start: Float, _ end: Float, _ steps: Int) -> [Float] {
-        let step = (end - start) / Float(steps - 1)
-        return (0..<steps).map { i in
-            i < steps / 2
-                ? Float(Double(start) + Double(step) * Double(i))
-                : Float(Double(end) - Double(step) * Double(steps - 1 - i))
+        let step: Float = (end - start) / Float(steps - 1)
+        let startD = Double(start)
+        let endD = Double(end)
+        let stepD = Double(step)
+        var out = [Float](repeating: 0, count: steps)
+        for i in 0..<steps {
+            if i < steps / 2 {
+                out[i] = Float(startD + stepD * Double(i))
+            } else {
+                out[i] = Float(endD - stepD * Double(steps - 1 - i))
+            }
         }
+        return out
     }
 
     /// Slaney-scale triangular mel filterbank *without* area normalization —
