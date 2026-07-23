@@ -6,7 +6,10 @@ import XCTest
 
 /// End-to-end integration: published fp32 Core ML core + SchismDSP
 /// transforms + SchismPipeline orchestration on a whole track, compared to
-/// the verified MLX references (`test_vectors_integration.npz`).
+/// the verified MLX references (`test_vectors_integration.npz`). Covers
+/// every distinct host path: RoFormer single-res (18M), RoFormer dual-res
+/// (V2), HTDemucs, AST windowing — htdemucs-ft/6s and CNN14 reuse these
+/// exact paths.
 ///
 /// Gated behind `SCHISM_DSP_INTEGRATION=1` — downloads ~600 MB of models on
 /// first run (cached under Caches/schism-dsp/models). Runs the fp32 cores
@@ -211,6 +214,63 @@ final class IntegrationTests: XCTestCase {
         assertStemResiduals(
             stems, want: want, order: ["bass", "drums", "other", "vocals"],
             maxDB: -60
+        )
+    }
+
+    /// V2 is the one sibling with a distinct host path: merged **analysis**
+    /// STFT (n_fft 4096, 2049 freqs -> 8196-wide) in, mask at **synthesis**
+    /// resolution (1025 freqs, 4100-wide) out, applied to a second n_fft-2048
+    /// STFT of the same chunk — two STFTs per chunk.
+    func testRoformerV2FullTrack() async throws {
+        try skipUnlessIntegration()
+        let npz = try Vectors.load(
+            repo: "mini-bs-roformer-v2-coreml", file: "test_vectors_integration.npz"
+        )
+        let mix = integrationChannels(try XCTUnwrap(npz["mix"]))
+        let want = try XCTUnwrap(npz["stems"])
+        let model = try await Models.fetch(
+            repo: "mini-bs-roformer-v2-coreml",
+            package: "BSRoformerV2_Core_fp32.mlpackage"
+        )
+
+        let stems = try Separation.roformer(
+            mix: mix, sources: 4, chunkSize: Separation.roformerChunkSize
+        ) { chunk in
+            let zAnalysis = chunk.map {
+                STFT.forward($0, nFFT: 4096, hopLength: 512, normalized: false)
+            }
+            let zSynthesis = chunk.map {
+                STFT.forward($0, nFFT: 2048, hopLength: 512, normalized: false)
+            }
+            let frames = zAnalysis[0].frames // 690
+            let merged = Roformer.merge(zAnalysis) // (690, 2049*2*2 = 8196)
+            let out = try predict(
+                model,
+                ["spec": MLShapedArray(scalars: merged, shape: [1, frames, 8196])]
+            )
+            let maskData = try XCTUnwrap(out["mask"]).scalars // (1, 4, 690, 4100)
+            let per = frames * 4100
+            return (0..<4).map { s in
+                let stemMask = Array(maskData[s * per ..< (s + 1) * per])
+                let masks = Roformer.unmerge(
+                    stemMask, freqs: 1025, channels: 2, frames: frames
+                )
+                return (0..<2).map { c in
+                    STFT.inverse(
+                        Roformer.applyMask(zSynthesis[c], mask: masks[c]),
+                        hopLength: 512, length: chunk[c].count, normalized: false
+                    )
+                }
+            }
+        }
+        print("RoFormer V2 full track (fp32 core, CPU+GPU):")
+        // V2 amplifies fp32 backend noise input-dependently (its torch-vs-
+        // Core-ML gap alone reaches -66 dB on this audio, vs -132.7 dB on
+        // the conversion-verification audio) — hence the looser gate; wiring
+        // bugs still land at >= -30 dB
+        assertStemResiduals(
+            stems, want: want, order: ["bass", "drums", "other", "vocals"],
+            maxDB: -50
         )
     }
 

@@ -106,11 +106,13 @@ SCHISM_DSP_VECTORS_DIR=path/to/build swift test   # offline, local vectors
 SCHISM_DSP_INTEGRATION=1 swift test --filter IntegrationTests
 ```
 
-The integration tests cover one representative per family (RoFormer 18M,
-HTDemucs, AST — the sibling models share every host code path) against
-`test_vectors_integration.npz`, running fp32 on CPU. Their per-chunk
-closures double as the reference host glue for each model card's I/O
-contract.
+The integration tests cover every distinct host path — RoFormer single-res
+(18M), RoFormer dual-res (V2: analysis STFT 4096 in, mask applied to a
+second 2048 STFT), HTDemucs, AST windowing; htdemucs-ft/6s and CNN14 reuse
+these exact paths — against `test_vectors_integration.npz`, running the
+fp32 cores under CPU+GPU (the configuration their parity numbers were
+verified with). Their per-chunk closures double as the reference host glue
+for each model card's I/O contract.
 
 Comparisons are `numpy.allclose`-style (`|a−b| ≤ atol + rtol·|b|`) with
 per-frontend tolerances around 1e-4 relative — the float32-vs-float64-FFT
